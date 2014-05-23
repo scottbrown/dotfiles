@@ -10,3 +10,5 @@ set showcmd
 
 set dir=~/.vimswap//,/tmp//,.
 
+set mouse=nicr
+
