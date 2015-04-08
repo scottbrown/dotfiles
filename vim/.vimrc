@@ -12,3 +12,6 @@ set dir=~/.vimswap//,/tmp//,.
 
 set mouse=nicr
 
+filetype on
+autocmd FileType make set noexpandtab shiftwidth=8 softtabstop=0
+
