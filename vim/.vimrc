@@ -12,3 +12,9 @@ set dir=~/.vimswap//,/tmp//,.
 
 set mouse=nicr
 
+autocmd FileType make setlocal noexpandtab
+
+set ruler
+
+set colorcolumn=80
+
