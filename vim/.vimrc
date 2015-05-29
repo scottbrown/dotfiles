@@ -16,5 +16,5 @@ autocmd FileType make setlocal noexpandtab
 
 set ruler
 
-set colorcolumn=80
+set colorcolumn=76
 
