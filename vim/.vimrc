@@ -13,6 +13,7 @@ set dir=~/.vimswap//,/tmp//,.
 set mouse=nicr
 
 autocmd FileType make setlocal noexpandtab
+autocmd BufNewFile,BufRead *.cft set syntax=yaml
 
 set ruler
 
