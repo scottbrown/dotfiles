@@ -1,0 +1,8 @@
+[toplevel]
+
+dockerlogin = ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin XXXXXXXX.dkr.ecr.us-west-2.amazonaws.com
+
+accounts = organizations list-accounts --query 'Accounts[?Status == `ACTIVE`].[Id]' --output text
+
+regions = ec2 describe-regions --region us-east-1 --query 'Regions[].[RegionName]' --output text
+
