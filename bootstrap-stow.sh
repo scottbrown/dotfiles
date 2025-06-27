@@ -8,4 +8,5 @@
 stow ruby
 stow tmux
 stow vim
+stow claude
 
