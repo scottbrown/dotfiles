@@ -9,4 +9,6 @@ stow ruby
 stow tmux
 stow vim
 stow claude
+stow bash
+stow git
 
