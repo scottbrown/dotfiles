@@ -1,0 +1,6 @@
+[user]
+	name = Scott Brown
+	email = scottbrown@users.noreply.github.com
+
+[core]
+	excludesFile = ~/.gitignore
