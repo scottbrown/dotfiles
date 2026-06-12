@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{{PROJECT_NAME}} — Architecture &amp; Data-Flow Visualization</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel2: #1c2230;
+    --line: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    /* flow kind colors */
+    --k-data: #58a6ff;
+    --k-untrusted: #f85149;
+    --k-llm: #bc8cff;
+    --k-guard: #f0b429;
+    --k-block: #ff5c5c;
+    --k-mask: #ff9e2c;
+    --k-store: #3fb950;
+    --k-tool: #2dd4bf;
+    --k-internal: #8b949e;
+    /* zone tints */
+    --z-untrusted: #f8514922;
+    --z-edge: #6e768122;
+    --z-advisor: #58a6ff18;
+    --z-bedrock: #bc8cff18;
+    --z-product: #2dd4bf18;
+    --z-data: #3fb95018;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--text);
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  #app { display: grid; grid-template-columns: 1fr 380px; grid-template-rows: auto 1fr; height: 100vh; }
+  header {
+    grid-column: 1 / 3; display: flex; align-items: center; gap: 16px;
+    padding: 10px 18px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+  header .sub { font-size: 12px; color: var(--muted); }
+  header .spacer { flex: 1; }
+  .scenarios { display: flex; flex-wrap: wrap; gap: 6px; }
+  .scenarios button {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    padding: 6px 11px; border-radius: 7px; font-size: 12px; cursor: pointer; transition: all .15s;
+  }
+  .scenarios button:hover { border-color: var(--accent); }
+  .scenarios button.active { background: var(--accent); color: #04101f; border-color: var(--accent); font-weight: 650; }
+  #stage { position: relative; overflow: hidden; background:
+    radial-gradient(circle at 30% 20%, #11161f 0%, var(--bg) 70%); }
+  svg { width: 100%; height: 100%; display: block; }
+
+  /* zones */
+  .zone rect { rx: 14; stroke-width: 1.2; fill-opacity: 1; }
+  .zone .zlabel { font-size: 12px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; fill: var(--muted); }
+  .zone .zsub   { font-size: 10px; fill: #6e7681; }
+
+  /* nodes */
+  .node rect { fill: var(--panel2); stroke: var(--line); stroke-width: 1.4; rx: 9; transition: stroke .2s, opacity .2s, filter .2s; }
+  .node .nlabel { font-size: 12.5px; font-weight: 650; fill: var(--text); }
+  .node .nsub   { font-size: 9.5px; fill: var(--muted); font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .node.dim { opacity: .26; }
+  .node.in-scope rect { stroke: #44506a; }
+  .node.active rect { stroke: var(--accent); stroke-width: 2.4; filter: drop-shadow(0 0 9px var(--accent)); }
+  .node.active.k-block rect  { stroke: var(--k-block); filter: drop-shadow(0 0 9px var(--k-block)); }
+  .node.active.k-mask  rect  { stroke: var(--k-mask);  filter: drop-shadow(0 0 9px var(--k-mask)); }
+  .node.active.k-store rect  { stroke: var(--k-store); filter: drop-shadow(0 0 9px var(--k-store)); }
+  .node.active.k-llm   rect  { stroke: var(--k-llm);   filter: drop-shadow(0 0 9px var(--k-llm)); }
+  .node.active.k-guard rect  { stroke: var(--k-guard); filter: drop-shadow(0 0 9px var(--k-guard)); }
+  .node.active.k-untrusted rect { stroke: var(--k-untrusted); filter: drop-shadow(0 0 9px var(--k-untrusted)); }
+
+  /* edges */
+  .edge { fill: none; stroke: #30363d; stroke-width: 1.6; opacity: .5; }
+  .edge.active { stroke-width: 3; opacity: 1; stroke-dasharray: 7 5; animation: dash 0.6s linear infinite; }
+  @keyframes dash { to { stroke-dashoffset: -24; } }
+  #packet { opacity: 0; }
+
+  /* side panel */
+  #side { background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; }
+  .controls { padding: 12px 14px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+  .btnrow { display: flex; gap: 8px; }
+  .btnrow button { flex: 1; background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    padding: 8px; border-radius: 7px; font-size: 13px; cursor: pointer; }
+  .btnrow button:hover { border-color: var(--accent); }
+  .btnrow button.primary { background: var(--accent); color: #04101f; font-weight: 700; border-color: var(--accent); }
+  .speedrow { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .speedrow input { flex: 1; }
+
+  .progress { display: flex; gap: 4px; padding: 0 14px; margin-top: 12px; flex-wrap: wrap; }
+  .progress .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); transition: all .2s; }
+  .progress .dot.done { background: #2f6f43; }
+  .progress .dot.cur  { background: var(--accent); box-shadow: 0 0 7px var(--accent); }
+
+  .narration { padding: 14px; overflow-y: auto; flex: 1; }
+  .narration .scn-name { font-size: 13px; font-weight: 700; color: var(--accent); margin-bottom: 2px; }
+  .narration .scn-blurb { font-size: 12px; color: var(--muted); margin-bottom: 14px; line-height: 1.5; }
+  .narration .step-no { font-size: 11px; color: var(--muted); letter-spacing: .5px; }
+  .narration .step-title { font-size: 15px; font-weight: 700; margin: 4px 0 8px; line-height: 1.35; }
+  .narration .hop { font-size: 12px; color: var(--muted); margin-bottom: 10px; font-family: ui-monospace, Menlo, monospace; }
+  .narration .hop b { color: var(--text); }
+  .narration .detail { font-size: 13px; line-height: 1.55; margin-bottom: 12px; }
+  .narration .ref { font-size: 11px; font-family: ui-monospace, Menlo, monospace; color: #6e7681;
+    background: var(--panel2); padding: 5px 8px; border-radius: 6px; display: inline-block; word-break: break-all; }
+  .boundary-flag { border: 1px solid var(--k-untrusted); background: #f8514915; color: #ffb3ad;
+    padding: 8px 10px; border-radius: 8px; font-size: 12px; margin-bottom: 12px; line-height: 1.4; }
+  .boundary-flag.safe { border-color: var(--k-store); background: #3fb95012; color: #9fe0ad; }
+  .kind-chip { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 20px;
+    text-transform: uppercase; letter-spacing: .5px; margin-bottom: 10px; }
+
+  /* legend */
+  .legend { border-top: 1px solid var(--line); padding: 12px 14px; }
+  .legend h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 0 0 8px; }
+  .legend .row { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+  .legend .item { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); }
+  .legend .swatch { width: 14px; height: 4px; border-radius: 2px; }
+  .complete-banner { text-align:center; font-size:12px; color: var(--k-store); margin-top:8px; display:none; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div>
+      <h1>{{PROJECT_NAME}} — Architecture &amp; Data-Flow</h1>
+      <div class="sub">{{PROJECT_TAGLINE}}</div>
+    </div>
+    <div class="spacer"></div>
+    <div class="scenarios" id="scenarioBtns"></div>
+  </header>
+
+  <div id="stage">
+    <svg id="svg" viewBox="0 0 1480 840" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#5b6675" />
+        </marker>
+        <marker id="arrow-active" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#9ec5ff" />
+        </marker>
+      </defs>
+      <g id="zoneLayer"></g>
+      <g id="edgeLayer"></g>
+      <g id="nodeLayer"></g>
+      <circle id="packet" r="7" />
+    </svg>
+  </div>
+
+  <div id="side">
+    <div class="controls">
+      <div class="btnrow">
+        <button id="btnPrev">‹ Prev</button>
+        <button id="btnPlay" class="primary">▶ Play</button>
+        <button id="btnNext">Next ›</button>
+      </div>
+      <div class="btnrow">
+        <button id="btnRestart">⟲ Restart scenario</button>
+      </div>
+      <div class="speedrow">
+        <span>Speed</span>
+        <input id="speed" type="range" min="0.4" max="2.4" step="0.2" value="1" />
+        <span id="speedVal">1.0×</span>
+      </div>
+      <div class="progress" id="progress"></div>
+      <div class="complete-banner" id="completeBanner">✓ Scenario complete</div>
+    </div>
+    <div class="narration" id="narration"></div>
+    <div class="legend">
+      <h3>Flow types</h3>
+      <div class="row" id="legendRow"></div>
+    </div>
+  </div>
+</div>
+<script>
+/* ============================================================
+   1. STATIC MODEL — zones, nodes, flow-type legend
+   ============================================================ */
+
+/* >>> BEGIN CODEBASE DATA MODEL — replace everything between these markers <<<
+   The four consts below (ZONES, NODES, KINDS, SCENARIOS) are the ONLY
+   codebase-specific part of this file. The engine below the END marker is
+   generic and must not be edited. See SKILL.md for the exact contract.
+
+   The block below is a minimal worked example. Replace it wholesale. */
+
+const ZONES = [
+  { x:20,  y:70, w:200, h:700, fill:'var(--z-untrusted)', stroke:'#f8514955', label:'Untrusted', sub:'clients' },
+  { x:250, y:70, w:520, h:700, fill:'var(--z-advisor)',   stroke:'#58a6ff44', label:'Application', sub:'this repo' },
+  { x:800, y:70, w:300, h:700, fill:'var(--z-data)',      stroke:'#3fb95044', label:'Data & external', sub:'' },
+];
+
+const NODES = {
+  n_client:  { x:40,  y:300, w:150, h:58, label:'Client',     sub:'untrusted caller' },
+  n_handler: { x:300, y:200, w:160, h:56, label:'Handler',    sub:'entrypoint' },
+  n_core:    { x:300, y:380, w:160, h:56, label:'Core logic', sub:'service layer' },
+  n_store:   { x:840, y:300, w:200, h:56, label:'Datastore',  sub:'persistence' },
+};
+
+const KINDS = {
+  data:      { color:'var(--k-data)',      label:'Trusted data' },
+  untrusted: { color:'var(--k-untrusted)', label:'Untrusted input' },
+  llm:       { color:'var(--k-llm)',       label:'LLM inference' },
+  guard:     { color:'var(--k-guard)',     label:'Validation' },
+  block:     { color:'var(--k-block)',     label:'Rejected' },
+  mask:      { color:'var(--k-mask)',      label:'Redacted' },
+  store:     { color:'var(--k-store)',     label:'Persist' },
+  tool:      { color:'var(--k-tool)',      label:'External call' },
+  internal:  { color:'var(--k-internal)',  label:'Internal' },
+};
+
+const SCENARIOS = {
+  request: {
+    name: 'Request — happy path',
+    blurb: 'A request enters, is validated, processed, and persisted.',
+    steps: [
+      { edge:['n_client','n_handler'], node:'n_handler', kind:'untrusted',
+        title:'Request enters at the edge', hop:'client ──▶ handler',
+        detail:'All fields are untrusted until validated.',
+        ref:'path/to/handler.ext:1', boundary:{text:'Trust boundary: untrusted input enters.'} },
+      { edge:['n_handler','n_core'], node:'n_core', kind:'data',
+        title:'Validated, handed to core logic', hop:'handler ──▶ core',
+        detail:'Parsed and bounded before any side effects.',
+        ref:'path/to/core.ext:1' },
+      { edge:['n_core','n_store'], node:'n_store', kind:'store',
+        title:'Persist result', hop:'core ──▶ datastore',
+        detail:'Written to the datastore.',
+        ref:'path/to/store.ext:1' },
+    ],
+  },
+};
+
+/* >>> END CODEBASE DATA MODEL <<< */
+
+/* ============================================================
+   3. ENGINE — render + animate
+   ============================================================ */
+const SVGNS = 'http://www.w3.org/2000/svg';
+const $ = id => document.getElementById(id);
+const zoneLayer = $('zoneLayer'), edgeLayer = $('edgeLayer'), nodeLayer = $('nodeLayer');
+const packet = $('packet');
+const nodeEls = {};   // id -> {g, rect}
+const edgeEls = {};   // "from->to" -> path
+
+function el(tag, attrs) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+function center(id) { const n = NODES[id]; return { x: n.x + n.w/2, y: n.y + n.h/2 }; }
+function edgeKey(from, to) { return from + '->' + to; }
+
+/* ---- render zones ---- */
+function renderZones() {
+  for (const z of ZONES) {
+    const g = el('g', { class:'zone' });
+    g.appendChild(el('rect', { x:z.x, y:z.y, width:z.w, height:z.h, rx:14, fill:z.fill, stroke:z.stroke }));
+    const lbl = el('text', { x:z.x+14, y:z.y+24, class:'zlabel' }); lbl.textContent = z.label; g.appendChild(lbl);
+    if (z.sub) { const s = el('text', { x:z.x+14, y:z.y+38, class:'zsub' }); s.textContent = z.sub; g.appendChild(s); }
+    zoneLayer.appendChild(g);
+  }
+}
+
+/* ---- build the union of edges used by any scenario, render once ---- */
+function renderEdges() {
+  const seen = new Set();
+  for (const key in SCENARIOS) {
+    for (const step of SCENARIOS[key].steps) {
+      if (!step.edge) continue;
+      const [from, to] = step.edge;
+      const k = edgeKey(from, to);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      const a = center(from), b = center(to);
+      const path = el('path', { d: edgePath(a, b), class:'edge', 'marker-end':'url(#arrow)' });
+      edgeEls[k] = path;
+      edgeLayer.appendChild(path);
+    }
+  }
+}
+// gently curved path so overlapping routes are distinguishable
+function edgePath(a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const mx = a.x + dx/2, my = a.y + dy/2;
+  const norm = Math.hypot(dx, dy) || 1;
+  const off = Math.min(40, norm*0.12);
+  const cx = mx - (dy/norm)*off, cy = my + (dx/norm)*off;
+  return `M ${a.x} ${a.y} Q ${cx} ${cy} ${b.x} ${b.y}`;
+}
+
+/* ---- render nodes ---- */
+function renderNodes() {
+  for (const id in NODES) {
+    const n = NODES[id];
+    const g = el('g', { class:'node', id:'node-'+id });
+    const rect = el('rect', { x:n.x, y:n.y, width:n.w, height:n.h });
+    g.appendChild(rect);
+    const lbl = el('text', { x:n.x+12, y:n.y+ (n.sub?23:n.h/2+4), class:'nlabel' });
+    lbl.textContent = n.label; g.appendChild(lbl);
+    if (n.sub) { const s = el('text', { x:n.x+12, y:n.y+39, class:'nsub' }); s.textContent = n.sub; g.appendChild(s); }
+    nodeEls[id] = { g, rect };
+    nodeLayer.appendChild(g);
+  }
+}
+
+/* ---- legend ---- */
+function renderLegend() {
+  const row = $('legendRow');
+  for (const k in KINDS) {
+    const item = document.createElement('div'); item.className = 'item';
+    const sw = document.createElement('span'); sw.className = 'swatch'; sw.style.background = KINDS[k].color;
+    const t = document.createElement('span'); t.textContent = KINDS[k].label;
+    item.appendChild(sw); item.appendChild(t); row.appendChild(item);
+  }
+}
+
+/* ---- scenario buttons ---- */
+function renderScenarioButtons() {
+  const wrap = $('scenarioBtns');
+  for (const key in SCENARIOS) {
+    const b = document.createElement('button');
+    b.textContent = SCENARIOS[key].name;
+    b.dataset.key = key;
+    b.onclick = () => selectScenario(key);
+    wrap.appendChild(b);
+  }
+}
+
+/* ============================================================
+   State machine
+   ============================================================ */
+let curKey = 'chat';
+let curStep = -1;
+let playing = false;
+let timer = null;
+let speed = 1;
+
+function scopeNodes(key) {
+  // nodes touched by this scenario get 'in-scope', others dim
+  const used = new Set();
+  for (const s of SCENARIOS[key].steps) {
+    if (s.node) used.add(s.node);
+    if (s.edge) { used.add(s.edge[0]); used.add(s.edge[1]); }
+  }
+  for (const id in nodeEls) {
+    nodeEls[id].g.classList.toggle('in-scope', used.has(id));
+    nodeEls[id].g.classList.toggle('dim', !used.has(id));
+  }
+  // only show edges in this scenario
+  const eused = new Set();
+  for (const s of SCENARIOS[key].steps) if (s.edge) eused.add(edgeKey(s.edge[0], s.edge[1]));
+  for (const k in edgeEls) edgeEls[k].style.display = eused.has(k) ? '' : 'none';
+}
+
+function clearActive() {
+  for (const id in nodeEls) nodeEls[id].g.classList.remove('active','k-block','k-mask','k-store','k-llm','k-guard','k-untrusted');
+  for (const k in edgeEls) { edgeEls[k].classList.remove('active'); edgeEls[k].setAttribute('marker-end','url(#arrow)'); }
+}
+
+function selectScenario(key) {
+  stop();
+  curKey = key; curStep = -1;
+  document.querySelectorAll('#scenarioBtns button').forEach(b => b.classList.toggle('active', b.dataset.key === key));
+  scopeNodes(key);
+  clearActive();
+  buildProgress();
+  $('completeBanner').style.display = 'none';
+  showIntro();
+  next(); // advance to first step
+}
+
+function buildProgress() {
+  const p = $('progress'); p.innerHTML = '';
+  SCENARIOS[curKey].steps.forEach((_, i) => {
+    const d = document.createElement('div'); d.className = 'dot'; d.dataset.i = i; p.appendChild(d);
+  });
+}
+function paintProgress() {
+  document.querySelectorAll('#progress .dot').forEach((d, i) => {
+    d.classList.toggle('done', i < curStep);
+    d.classList.toggle('cur', i === curStep);
+  });
+}
+
+function showIntro() {
+  const s = SCENARIOS[curKey];
+  $('narration').innerHTML =
+    `<div class="scn-name">${s.name}</div><div class="scn-blurb">${s.blurb}</div>` +
+    `<div class="detail" style="color:var(--muted)">Press <b>▶ Play</b> or <b>Next ›</b> to step through the flow.</div>`;
+}
+
+/* ---- animate a single step ---- */
+function renderStep(i) {
+  const step = SCENARIOS[curKey].steps[i];
+  clearActive();
+  const kind = step.kind || 'data';
+  const color = KINDS[kind].color;
+
+  // activate edge + travelling packet
+  if (step.edge) {
+    const k = edgeKey(step.edge[0], step.edge[1]);
+    const path = edgeEls[k];
+    if (path) {
+      path.classList.add('active');
+      path.style.stroke = color;
+      path.setAttribute('marker-end','url(#arrow-active)');
+      animatePacket(path, color);
+    }
+  }
+  // activate destination node
+  const target = step.node || (step.edge && step.edge[1]);
+  if (target && nodeEls[target]) {
+    const g = nodeEls[target].g;
+    g.classList.add('active');
+    const km = { block:'k-block', mask:'k-mask', store:'k-store', llm:'k-llm', guard:'k-guard', untrusted:'k-untrusted' }[kind];
+    if (km) g.classList.add(km);
+  }
+
+  // narration
+  const boundaryHtml = step.boundary
+    ? `<div class="boundary-flag${step.boundary.safe ? ' safe' : ''}">${step.boundary.safe ? '🔒 ' : '⚠ '}${step.boundary.text}</div>`
+    : '';
+  $('narration').innerHTML =
+    `<div class="kind-chip" style="background:${color}22;color:${color}">${KINDS[kind].label}</div>` +
+    `<div class="step-no">STEP ${i+1} / ${SCENARIOS[curKey].steps.length}</div>` +
+    `<div class="step-title">${step.title}</div>` +
+    `<div class="hop">${step.hop || ''}</div>` +
+    boundaryHtml +
+    `<div class="detail">${step.detail}</div>` +
+    (step.ref ? `<div class="ref">${step.ref}</div>` : '');
+  paintProgress();
+}
+
+let packetRun = 0;
+function animatePacket(path, color) {
+  const myRun = ++packetRun;            // cancels any in-flight packet from a prior step
+  const len = path.getTotalLength();
+  packet.setAttribute('fill', color);
+  packet.style.filter = `drop-shadow(0 0 6px ${color})`;
+  const dur = 900 / speed;
+  let start = null;
+  function frame(now) {
+    if (myRun !== packetRun) return;     // superseded
+    if (start === null) start = now;
+    const t = Math.min(1, (now - start) / dur);
+    const pt = path.getPointAtLength(t * len);
+    packet.setAttribute('cx', pt.x); packet.setAttribute('cy', pt.y);
+    packet.style.opacity = t < 1 ? 1 : 0;
+    if (t < 1) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ---- navigation ---- */
+function next() {
+  const steps = SCENARIOS[curKey].steps;
+  if (curStep >= steps.length - 1) { stop(); $('completeBanner').style.display = 'block'; return false; }
+  curStep++;
+  renderStep(curStep);
+  return true;
+}
+function prev() {
+  if (curStep <= 0) { curStep = -1; clearActive(); showIntro(); paintProgress(); return; }
+  curStep--;
+  renderStep(curStep);
+  $('completeBanner').style.display = 'none';
+}
+function play() {
+  if (playing) { stop(); return; }
+  playing = true;
+  $('btnPlay').textContent = '❚❚ Pause';
+  if (curStep >= SCENARIOS[curKey].steps.length - 1) { curStep = -1; }
+  tick();
+}
+function tick() {
+  if (!playing) return;
+  const advanced = next();
+  if (!advanced) { stop(); return; }
+  timer = setTimeout(tick, 2300 / speed);
+}
+function stop() {
+  playing = false;
+  $('btnPlay').textContent = '▶ Play';
+  if (timer) { clearTimeout(timer); timer = null; }
+}
+
+/* ---- wire controls ---- */
+$('btnNext').onclick = () => { stop(); next(); };
+$('btnPrev').onclick = () => { stop(); prev(); };
+$('btnPlay').onclick = () => play();
+$('btnRestart').onclick = () => selectScenario(curKey);
+$('speed').oninput = e => { speed = parseFloat(e.target.value); $('speedVal').textContent = speed.toFixed(1) + '×'; };
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight') { stop(); next(); }
+  else if (e.key === 'ArrowLeft') { stop(); prev(); }
+  else if (e.key === ' ') { e.preventDefault(); play(); }
+});
+
+/* ---- boot ---- */
+renderZones();
+renderEdges();
+renderNodes();
+renderLegend();
+renderScenarioButtons();
+selectScenario(Object.keys(SCENARIOS)[0]);
+
+</script>
+</body>
+</html>
