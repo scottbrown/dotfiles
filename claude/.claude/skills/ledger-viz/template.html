@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__YEAR__ Ledger — A Year in Motion</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2430; --line:#283040;
+    --txt:#e6edf3; --dim:#8b949e; --accent:#58a6ff;
+    --green:#3fb950; --red:#f85149; --amber:#e3b341; --teal:#39c5cf; --purple:#bc8cff;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--txt);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto;padding:22px 22px 60px}
+  header{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:18px}
+  h1{font-size:21px;margin:0;font-weight:650;letter-spacing:.2px}
+  h1 .yr{color:var(--accent)}
+  .sub{color:var(--dim);font-size:12.5px;margin-top:3px}
+  .datebox{text-align:right}
+  .datebox .day{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1}
+  .datebox .lbl{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:1px;margin-top:4px}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+  .tab{background:var(--panel);border:1px solid var(--line);color:var(--dim);padding:8px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:550;transition:.15s}
+  .tab:hover{color:var(--txt);border-color:#3a455a}
+  .tab.on{background:var(--panel2);color:var(--txt);border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+  .stage{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;position:relative}
+  .canvas-wrap{position:relative;width:100%;height:460px}
+  canvas{position:absolute;inset:0;width:100%;height:100%}
+  .feed{position:absolute;top:14px;right:14px;width:248px;max-height:432px;overflow:hidden;background:rgba(13,17,23,.72);border:1px solid var(--line);border-radius:10px;padding:10px;backdrop-filter:blur(4px);display:none}
+  .feed h4{margin:0 0 8px;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--dim)}
+  .feed .row{display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:3px 0;border-bottom:1px solid rgba(40,48,64,.5)}
+  .feed .row .nm{color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .feed .row .am{font-variant-numeric:tabular-nums;flex:0 0 auto}
+  .feed .em{color:var(--dim);font-size:12px;font-style:italic}
+  .controls{display:flex;align-items:center;gap:14px;margin-top:16px;flex-wrap:wrap}
+  .play{width:46px;height:46px;border-radius:50%;border:none;background:var(--accent);color:#08111f;font-size:18px;cursor:pointer;flex:0 0 auto;display:flex;align-items:center;justify-content:center;transition:.15s}
+  .play:hover{filter:brightness(1.1)}
+  .ctl{width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:var(--panel2);color:var(--txt);font-size:17px;cursor:pointer;flex:0 0 auto;display:flex;align-items:center;justify-content:center;transition:.15s}
+  .ctl:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+  .ctl:disabled{opacity:.32;cursor:not-allowed}
+  .scrub{flex:1;min-width:200px;-webkit-appearance:none;appearance:none;height:6px;border-radius:4px;background:var(--line);outline:none;cursor:pointer}
+  .scrub::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid var(--bg)}
+  .scrub::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid var(--bg)}
+  .speed{display:flex;gap:4px;align-items:center;color:var(--dim);font-size:12px}
+  .speed button{background:var(--panel2);border:1px solid var(--line);color:var(--dim);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px}
+  .speed button.on{color:var(--txt);border-color:var(--accent)}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;color:var(--dim);font-size:12px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .dot{width:10px;height:10px;border-radius:3px;display:inline-block}
+  .note{color:var(--dim);font-size:11.5px;margin-top:14px;line-height:1.6}
+  .vtitle{font-size:13px;color:var(--dim);margin:0 0 2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1><span class="yr">__YEAR__</span> Ledger — A Year in Motion</h1>
+      <div class="sub" id="vtitle">Cumulative spending by category</div>
+    </div>
+    <div class="datebox">
+      <div class="day" id="dateDay">Jan 1</div>
+      <div class="lbl">day <span id="dateNum">1</span> / <span id="dateTot">365</span></div>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab on" data-v="spend">Spending by category</button>
+    <button class="tab" data-v="net">Net worth &amp; cashflow</button>
+    <button class="tab" data-v="bal">Account balances</button>
+    <button class="tab" data-v="flow">Transaction flow</button>
+  </div>
+
+  <div class="stage">
+    <div class="canvas-wrap">
+      <canvas id="cv"></canvas>
+      <div class="feed" id="feed"><h4>This day</h4><div id="feedBody"></div></div>
+    </div>
+    <div class="legend" id="legend"></div>
+    <div class="controls">
+      <button class="ctl" id="reset" title="Reset to Jan 1">↺</button>
+      <button class="ctl" id="stepB" title="Step back one day">‹</button>
+      <button class="play" id="play">▶</button>
+      <button class="ctl" id="stepF" title="Step forward one day">›</button>
+      <input class="scrub" id="scrub" type="range" min="1" max="365" value="1">
+      <div class="speed">speed
+        <button data-s="0.25">¼×</button>
+        <button data-s="0.5">½×</button>
+        <button class="on" data-s="1">1×</button>
+        <button data-s="2">2×</button>
+      </div>
+    </div>
+    <div class="note" id="note"></div>
+  </div>
+</div>
+
+<script>
+const RAW = __DATA__;
+const YEAR = "__YEAR__";
+
+/* ---------- date helpers ---------- */
+const YNUM=+YEAR, LEAP=(YNUM%4===0&&YNUM%100!==0)||YNUM%400===0;
+const MD=[31,LEAP?29:28,31,30,31,30,31,31,30,31,30,31];
+const MN=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const CUM=[]; {let s=0; for(const m of MD){CUM.push(s); s+=m;}}
+function doy(md){const mo=+md.slice(0,2), da=+md.slice(2); return CUM[mo-1]+da;}
+function label(d){let mo=0; while(mo<11 && d>CUM[mo+1]) mo++; return MN[mo]+" "+(d-CUM[mo]);}
+const MAXD=LEAP?366:365;
+
+/* ---------- model ---------- */
+const root=a=>a.split(':')[0];
+function catOf(a){const p=a.split(':'); return p.slice(1,3).join(':')||p[0];}
+function balLabel(a){const p=a.split(':'); return p.slice(-2).join(':');}
+
+const P = RAW.map(o=>({d:doy(o.d), p:o.p, a:o.a, v:o.v})).sort((x,y)=>x.d-y.d);
+
+// balance-sheet leaf accounts (assets/liabilities)
+const bsAccts=[...new Set(P.filter(p=>root(p.a)==='assets'||root(p.a)==='liabilities').map(p=>p.a))];
+// chequing/current account for the cashflow line (auto-detected)
+const cheqAcct=bsAccts.find(a=>/chequing|checking|current/i.test(a))||null;
+
+// precompute per-day snapshots
+const dayNet=new Array(MAXD+1).fill(0);
+const dayCheq=new Array(MAXD+1).fill(0);
+const dayCat=new Array(MAXD+1);     // {cat:cumExpense}
+const dayBal=new Array(MAXD+1);     // {acct:balance}
+const dayTx =new Array(MAXD+1);     // [{p, v}] expenses/income on that day
+const cumSpend=new Array(MAXD+1).fill(0);
+{
+  const bal={}, cat={}; let pi=0;
+  for(let day=1; day<=MAXD; day++){
+    const todays={};
+    while(pi<P.length && P[pi].d===day){
+      const p=P[pi];
+      bal[p.a]=(bal[p.a]||0)+p.v;
+      if(root(p.a)==='expenses'){ const c=catOf(p.a); cat[c]=(cat[c]||0)+p.v; }
+      if(root(p.a)==='expenses'||root(p.a)==='income'){
+        todays[p.p]=(todays[p.p]||0)+ (root(p.a)==='income'? p.v : p.v);
+      }
+      pi++;
+    }
+    let nw=0; for(const a in bal){const r=root(a); if(r==='assets'||r==='liabilities') nw+=bal[a];}
+    dayNet[day]=nw;
+    dayCheq[day]=cheqAcct?(bal[cheqAcct]||0):0;
+    let cs=0; for(const c in cat) cs+=cat[c];
+    cumSpend[day]=cs;
+    dayCat[day]={...cat};
+    const bs={}; for(const a of bsAccts) bs[a]=bal[a]||0; dayBal[day]=bs;
+    dayTx[day]=Object.entries(todays).map(([p,v])=>({p,v}));
+  }
+}
+
+// colour palette for categories (stable by name)
+const PAL=["#58a6ff","#3fb950","#e3b341","#f85149","#bc8cff","#39c5cf","#ff7b72","#d2a8ff","#7ee787","#ffa657","#79c0ff","#f0883e","#56d364","#db61a2","#a5d6ff","#e8a0bf"];
+const catColor={};
+function colorFor(c){ if(!(c in catColor)){let h=0; for(const ch of c) h=(h*31+ch.charCodeAt(0))>>>0; catColor[c]=PAL[h%PAL.length];} return catColor[c]; }
+
+const fmt=v=>{const s=v<0?'-':''; v=Math.abs(v); return s+'$'+(v>=1000? Math.round(v).toLocaleString() : v.toFixed(2));};
+const fmtK=v=>{const s=v<0?'-':''; v=Math.abs(v); if(v>=1000) return s+'$'+(v/1000).toFixed(0)+'k'; return s+'$'+Math.round(v);};
+
+/* ---------- canvas ---------- */
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+let W=0,H=0,DPR=Math.min(2,window.devicePixelRatio||1);
+function resize(){const r=cv.getBoundingClientRect(); W=r.width; H=r.height; cv.width=W*DPR; cv.height=H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0);}
+window.addEventListener('resize',()=>{resize(); draw();});
+
+let view='spend', day=1, playing=false, speed=1;
+const disp={}; // eased display values for bar race
+
+function setView(v){
+  view=v;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.v===v));
+  const titles={spend:'Cumulative spending by category',net:'Net worth & chequing balance over the year',bal:'Account balances (assets &amp; liabilities)',flow:'Every transaction as it posts'};
+  document.getElementById('vtitle').innerHTML=titles[v];
+  document.getElementById('feed').style.display = (v==='flow')?'block':'none';
+  buildLegend(); draw();
+}
+
+function buildLegend(){
+  const el=document.getElementById('legend'); el.innerHTML='';
+  const add=(c,t)=>{el.innerHTML+=`<span><i class="dot" style="background:${c}"></i>${t}</span>`;};
+  if(view==='net'){add('var(--accent)','Net worth'); add('var(--teal)','Chequing balance');}
+  else if(view==='bal'){add('var(--green)','Assets'); add('var(--red)','Liabilities');}
+  else if(view==='flow'){add('var(--red)','Expense'); add('var(--green)','Income'); el.innerHTML+='<span style="color:var(--dim)">dot size ∝ amount</span>';}
+  else {add('var(--dim)','bars = running total per category');}
+}
+
+/* ---------- drawing ---------- */
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  if(view==='spend') drawSpend();
+  else if(view==='net') drawNet();
+  else if(view==='bal') drawBal();
+  else drawFlow();
+  document.getElementById('dateDay').textContent=label(day);
+  document.getElementById('dateNum').textContent=day;
+  updateControls();
+}
+
+function drawSpend(){
+  const cat=dayCat[day];
+  const entries=Object.entries(cat).filter(([,v])=>v>0.5).sort((a,b)=>b[1]-a[1]).slice(0,12);
+  // ease display values
+  const targets={}; entries.forEach(([k,v])=>targets[k]=v);
+  for(const k in targets){ disp[k]=disp[k]||0; disp[k]+=(targets[k]-disp[k])*0.25; }
+  const shown=entries.map(([k])=>[k,disp[k]]).sort((a,b)=>b[1]-a[1]);
+  const max=Math.max(1,...shown.map(s=>s[1]));
+  const padL=160, padR=80, top=20, bh=Math.min(30,(H-top-20)/Math.max(1,shown.length)-6), gap=8;
+  ctx.textBaseline='middle';
+  shown.forEach((s,i)=>{
+    const y=top+i*(bh+gap);
+    const w=(W-padL-padR)*(s[1]/max);
+    ctx.fillStyle=colorFor(s[0]);
+    ctx.globalAlpha=.9; roundRect(padL,y,Math.max(2,w),bh,5); ctx.fill(); ctx.globalAlpha=1;
+    ctx.fillStyle='#e6edf3'; ctx.font='12px sans-serif'; ctx.textAlign='right';
+    ctx.fillText(s[0],padL-10,y+bh/2);
+    ctx.textAlign='left'; ctx.fillStyle='#c9d3df'; ctx.font='600 12px sans-serif';
+    ctx.fillText(fmt(s[1]),padL+w+8,y+bh/2);
+  });
+  // total
+  ctx.textAlign='left'; ctx.fillStyle='#8b949e'; ctx.font='12px sans-serif';
+  ctx.fillText('Total spent to date: '+fmt(cumSpend[day]),padL,H-8);
+}
+
+function drawNet(){
+  const padL=66,padR=20,top=24,bot=H-30;
+  const vals=dayNet.slice(1,MAXD+1), cheq=dayCheq.slice(1,MAXD+1);
+  let lo=Math.min(...vals,...cheq), hi=Math.max(...vals,...cheq);
+  const pad=(hi-lo)*0.08||1; lo-=pad; hi+=pad;
+  const X=d=>padL+(W-padL-padR)*((d-1)/(MAXD-1));
+  const Y=v=>bot-(bot-top)*((v-lo)/(hi-lo));
+  // gridlines
+  ctx.strokeStyle='#222b39'; ctx.fillStyle='#5b6573'; ctx.font='10px sans-serif'; ctx.textAlign='right'; ctx.textBaseline='middle';
+  for(let i=0;i<=4;i++){const v=lo+(hi-lo)*i/4, y=Y(v); ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(W-padR,y); ctx.stroke(); ctx.fillText(fmtK(v),padL-6,y);}
+  // month ticks
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  for(let m=0;m<12;m++){const d=CUM[m]+1,x=X(d); ctx.fillStyle='#5b6573'; ctx.fillText(MN[m],x,bot+6);}
+  // zero line
+  if(lo<0&&hi>0){ctx.strokeStyle='#3a455a';ctx.beginPath();ctx.moveTo(padL,Y(0));ctx.lineTo(W-padR,Y(0));ctx.stroke();}
+  const drawLine=(arr,col,fill)=>{
+    ctx.beginPath();
+    for(let d=1; d<=day; d++){const x=X(d),y=Y(arr[d-1]); d===1?ctx.moveTo(x,y):ctx.lineTo(x,y);}
+    if(fill){ctx.lineTo(X(day),bot); ctx.lineTo(X(1),bot); ctx.closePath(); ctx.fillStyle=fill; ctx.fill();}
+    else {ctx.strokeStyle=col; ctx.lineWidth=2; ctx.stroke();}
+  };
+  drawLine(vals,null,'rgba(88,166,255,.10)');
+  drawLine(vals,'#58a6ff');
+  drawLine(cheq,'#39c5cf');
+  // head dots + values
+  const head=(arr,col)=>{const x=X(day),y=Y(arr[day-1]); ctx.fillStyle=col; ctx.beginPath(); ctx.arc(x,y,4,0,7); ctx.fill();};
+  head(vals,'#58a6ff'); head(cheq,'#39c5cf');
+  ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+  ctx.fillStyle='#58a6ff'; ctx.font='600 20px sans-serif'; ctx.fillText(fmt(dayNet[day]),padL,top-4);
+  ctx.fillStyle='#39c5cf'; ctx.font='12px sans-serif'; ctx.fillText('chequing '+fmt(dayCheq[day]),padL+170,top-6);
+}
+
+function drawBal(){
+  const bs=dayBal[day];
+  const arr=bsAccts.map(a=>[balLabel(a),bs[a]]).filter(x=>Math.abs(x[1])>0.5).sort((a,b)=>b[1]-a[1]);
+  const max=Math.max(1,...arr.map(x=>Math.abs(x[1])));
+  const midX=W*0.52, top=16, bh=Math.min(26,(H-top-16)/Math.max(1,arr.length)-5), gap=5;
+  ctx.textBaseline='middle'; ctx.font='11px sans-serif';
+  arr.forEach((x,i)=>{
+    const y=top+i*(bh+gap), v=x[1];
+    const w=(Math.min(midX-10,W-midX-90))*(Math.abs(v)/max);
+    ctx.fillStyle = v>=0? '#3fb950':'#f85149'; ctx.globalAlpha=.85;
+    if(v>=0) roundRect(midX,y,Math.max(2,w),bh,4); else roundRect(midX-Math.max(2,w),y,Math.max(2,w),bh,4);
+    ctx.fill(); ctx.globalAlpha=1;
+    ctx.fillStyle='#aeb8c4'; ctx.textAlign = v>=0?'right':'left';
+    ctx.fillText(x[0], v>=0? midX-8 : midX+8, y+bh/2);
+    ctx.fillStyle='#e6edf3'; ctx.font='600 11px sans-serif'; ctx.textAlign= v>=0?'left':'right';
+    ctx.fillText(fmtK(v), v>=0? midX+w+6 : midX-w-6, y+bh/2);
+    ctx.font='11px sans-serif';
+  });
+  ctx.strokeStyle='#3a455a'; ctx.beginPath(); ctx.moveTo(midX,top-4); ctx.lineTo(midX,top+arr.length*(bh+gap)); ctx.stroke();
+}
+
+function drawFlow(){
+  const padL=44,padR=16,top=18,bot=H-30;
+  const X=d=>padL+(W-padL-padR)*((d-1)/(MAXD-1));
+  const exp=P.filter(p=>root(p.a)==='expenses'&&p.v>0);
+  const inc=P.filter(p=>root(p.a)==='income');
+  const amax=Math.max(...exp.map(p=>p.v),...inc.map(p=>Math.abs(p.v)),1);
+  const Y=v=>bot-(bot-top)*(Math.log10(1+v)/Math.log10(1+amax));
+  // axes
+  ctx.strokeStyle='#222b39'; ctx.fillStyle='#5b6573'; ctx.font='10px sans-serif'; ctx.textAlign='right'; ctx.textBaseline='middle';
+  [10,100,1000,10000].forEach(v=>{if(v<amax){const y=Y(v); ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(W-padR,y);ctx.stroke(); ctx.fillText('$'+v.toLocaleString(),padL-4,y);}});
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  for(let m=0;m<12;m++){const x=X(CUM[m]+1); ctx.fillStyle='#5b6573'; ctx.fillText(MN[m],x,bot+6);}
+  const dot=(p,col)=>{ if(p.d>day) return; const v=Math.abs(p.v); const x=X(p.d),y=Y(v); const r=2+Math.sqrt(v)/12;
+    ctx.globalAlpha = p.d>day-6 ? 0.95 : 0.4;   // recent transactions glow brighter
+    ctx.fillStyle=col; ctx.beginPath(); ctx.arc(x,y,Math.min(22,r),0,7); ctx.fill(); ctx.globalAlpha=1;};
+  inc.forEach(p=>dot(p,'rgba(63,185,80,.7)'));
+  exp.forEach(p=>dot(p,'rgba(248,81,73,.7)'));
+  // playhead
+  const xh=X(day); ctx.strokeStyle='rgba(227,179,65,.8)'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(xh,top-6); ctx.lineTo(xh,bot); ctx.stroke();
+  // running total
+  ctx.fillStyle='#8b949e'; ctx.font='12px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+  ctx.fillText('Spent to date: '+fmt(cumSpend[day]),padL,top-4);
+  // feed
+  const fb=document.getElementById('feedBody'); const tx=dayTx[day]||[];
+  if(tx.length===0){ fb.innerHTML='<div class="em">no transactions</div>'; }
+  else { fb.innerHTML=tx.slice(0,16).map(t=>{const col=t.v<0?'var(--green)':'var(--red)';
+    return `<div class="row"><span class="nm">${esc(t.p)}</span><span class="am" style="color:${col}">${fmt(t.v<0?-t.v:t.v)}</span></div>`;}).join(''); }
+}
+function esc(s){return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+
+function roundRect(x,y,w,h,r){r=Math.min(r,h/2,w/2);ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+
+/* ---------- playback ---------- */
+const scrub=document.getElementById('scrub'), playBtn=document.getElementById('play');
+let acc=0,last=0;
+function tick(t){
+  if(playing){
+    if(!last) last=t; const dt=t-last; last=t;
+    acc+=dt*speed*0.004;             // ~4 days/sec at 1x
+    while(acc>=1){ acc-=1; day++; if(day>MAXD){day=MAXD; playing=false; playBtn.textContent='↻'; break;} }
+    scrub.value=day;
+  } else last=0;
+  draw();
+  requestAnimationFrame(tick);
+}
+const resetBtn=document.getElementById('reset'), stepF=document.getElementById('stepF'), stepB=document.getElementById('stepB');
+function pause(){ playing=false; playBtn.textContent='▶'; last=0; }
+function setDay(d){ day=Math.max(1,Math.min(MAXD,d)); scrub.value=day; updateControls(); }
+function updateControls(){ stepF.disabled=day>=MAXD; stepB.disabled=day<=1; }
+playBtn.onclick=()=>{ if(day>=MAXD){ setDay(1); } playing=!playing; playBtn.textContent=playing?'❚❚':'▶'; last=0; };
+scrub.oninput=()=>{ pause(); setDay(+scrub.value); for(const k in disp) delete disp[k]; };
+resetBtn.onclick=()=>{ pause(); setDay(1); for(const k in disp) delete disp[k]; };
+stepF.onclick=()=>{ pause(); setDay(day+1); };
+stepB.onclick=()=>{ pause(); setDay(day-1); };
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>setView(t.dataset.v));
+document.querySelectorAll('.speed button').forEach(b=>b.onclick=()=>{speed=+b.dataset.s; document.querySelectorAll('.speed button').forEach(x=>x.classList.toggle('on',x===b));});
+
+document.getElementById('note').innerHTML =
+  'Built from <code>'+RAW.length+'</code> postings in the '+YEAR+' ledger, computed entirely in your browser — no data leaves this file. '+
+  'Net worth = assets + liabilities (mark-to-market brokerage postings cause the swings). '+
+  'Real entries run Jan–Jun; later months are recurring placeholders, so the lines flatten.';
+
+scrub.max=MAXD; document.getElementById('dateTot').textContent=MAXD;
+resize(); setView('spend'); updateControls(); requestAnimationFrame(tick);
+</script>
+</body>
+</html>
